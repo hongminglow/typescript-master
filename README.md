@@ -1,8 +1,8 @@
 # TypeScript Master
 
-A night-theme TypeScript tutorial/reference app focused on **type transformations**.
+A night-theme TypeScript tutorial/reference app that explains each TypeScript concept in a focused section.
 
-This repo turns the “answers” you copied from Total TypeScript into a **clean, scannable set of sections** with short explanations + copyable code snippets.
+Each section translates a class of type-system ideas into a **clean, scannable layout** with short explanations and copyable code snippets so you can quickly refresh a pattern.
 
 ## What you get
 
