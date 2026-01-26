@@ -243,6 +243,111 @@ type ClickEvent = Extract<Event, { type: 'click' }>
   // TypeScript ensures action can only be a valid key
 }`,
       },
+      {
+        id: "type-guard-predicate",
+        title: "Type guards (type predicates)",
+        summary:
+          "Teach TypeScript how to narrow using `value is Type` return types.",
+        details:
+          "Most common use: array filtering, parsing, and runtime checks on `unknown` values.",
+        tags: ["union", "pattern"],
+        io: {
+          input: "const raw: Array<string | null | undefined>",
+          transform: "raw.filter(isDefined)",
+          output: "string[]",
+        },
+        code: `function isDefined<T>(value: T): value is NonNullable<T> {
+  return value !== null && value !== undefined
+}
+
+const raw = ['a', null, 'b', undefined]
+
+const filtered = raw.filter(isDefined)
+//    ^? string[]`,
+      },
+      {
+        id: "assertion-functions",
+        title: "Assertion functions",
+        summary: "Narrow by throwing at runtime: `asserts value is Type`.",
+        details:
+          "Perfect for boundary validation: if input is wrong, fail fast — and downstream code becomes strongly typed.",
+        tags: ["pattern"],
+        io: {
+          input: "value?: string",
+          transform: "assertDefined(value)",
+          output: "value: string",
+        },
+        code: `function assertDefined<T>(value: T): asserts value is NonNullable<T> {
+  if (value === null || value === undefined) {
+    throw new Error('Value is missing')
+  }
+}
+
+function getLength(value?: string) {
+  assertDefined(value)
+  return value.length
+}`,
+      },
+      {
+        id: "discriminated-tuples",
+        title: "Discriminated tuples",
+        summary:
+          "Model events/actions as `[tag, payload]` tuples for compact APIs.",
+        details:
+          "Tuples can be discriminated the same way as objects: narrow on the first element.",
+        tags: ["union", "pattern"],
+        io: {
+          input: "type Action = ['add', number] | ['remove', string]",
+          transform: "if (action[0] === 'add') ...",
+          output: "payload narrows to number (or string)",
+        },
+        code: `type Action =
+  | ['add', number]
+  | ['remove', string]
+
+function reducer(action: Action) {
+  const [type, payload] = action
+
+  if (type === 'add') {
+    payload
+    // ^? number
+  } else {
+    payload
+    // ^? string
+  }
+}`,
+      },
+      {
+        id: "exhaustive-switch",
+        title: "Exhaustive checks with never",
+        summary: "Make missing union branches a compile-time error.",
+        details:
+          "When you add a new union member later, this pattern forces you to update the switch/if chain.",
+        tags: ["union", "pattern"],
+        io: {
+          input: "type Shape = Circle | Square",
+          transform: "default: assertNever(x)",
+          output: "New union member => error until handled",
+        },
+        code: `type Shape =
+  | { kind: 'circle'; r: number }
+  | { kind: 'square'; size: number }
+
+function assertNever(x: never): never {
+  throw new Error('Unexpected object: ' + JSON.stringify(x))
+}
+
+function area(s: Shape) {
+  switch (s.kind) {
+    case 'circle':
+      return Math.PI * s.r ** 2
+    case 'square':
+      return s.size ** 2
+    default:
+      return assertNever(s)
+  }
+}`,
+      },
     ],
   },
   {
@@ -265,6 +370,37 @@ type ClickEvent = Extract<Event, { type: 'click' }>
 } as const
 
 // values are literals, keys are readonly`,
+      },
+      {
+        id: "satisfies-vs-as-const",
+        title: "satisfies vs as const",
+        summary:
+          "`satisfies` validates a shape without changing inference; `as const` freezes inference to literals/readonly.",
+        details:
+          "Use `satisfies` for config objects when you want strict checking but still want precise inferred literals.",
+        tags: ["typeof", "pattern"],
+        io: {
+          input: "const routes = { ... }",
+          transform: "... satisfies Record<string, RouteConfig>",
+          output: "Shape-checked + keep literal paths",
+        },
+        code: `type RouteConfig = { path: string; auth: boolean }
+
+// ✅ checked, while keeping precise inference
+const routes = {
+  home: { path: '/', auth: false },
+  admin: { path: '/admin', auth: true },
+} satisfies Record<string, RouteConfig>
+
+type RouteKey = keyof typeof routes
+//    ^? 'home' | 'admin'
+
+routes.home.path
+//    ^? '/' (still a literal)
+
+// ✅ freeze literal arrays
+const roles = ['admin', 'editor'] as const
+type Role = (typeof roles)[number]`,
       },
       {
         id: "union-from-values",
@@ -440,6 +576,80 @@ function head<T>(arr: NonEmptyArray<T>) {
 
 head([1])
 head([1, 2, 3])`,
+      },
+      {
+        id: "function-overloads",
+        title: "Function overloads",
+        summary:
+          "Expose multiple call signatures while sharing one implementation.",
+        details:
+          "Overloads are best when your API truly behaves differently per input. The implementation signature must cover all overloads.",
+        tags: ["pattern"],
+        io: {
+          input: "parse('hello') or parse(123)",
+          transform: "Declare overload signatures + implement once",
+          output: "Return type narrows based on the input",
+        },
+        code: `type Parsed =
+  | { kind: 'string'; value: string }
+  | { kind: 'number'; value: number }
+
+function parse(input: string): Extract<Parsed, { kind: 'string' }>
+function parse(input: number): Extract<Parsed, { kind: 'number' }>
+function parse(input: string | number): Parsed {
+  if (typeof input === 'string') return { kind: 'string', value: input }
+  return { kind: 'number', value: input }
+}
+
+const a = parse('hello')
+//    ^? { kind: 'string'; value: string }
+
+const b = parse(123)
+//    ^? { kind: 'number'; value: number }`,
+      },
+      {
+        id: "variadic-tuples",
+        title: "Variadic tuple types",
+        summary: "Use tuple spreads and `infer` to model flexible arguments.",
+        details:
+          "This is the backbone of strongly typed `pipe`, `compose`, and many hook helpers.",
+        tags: ["generic", "pattern"],
+        io: {
+          input: "type T = [1, 2, 3]",
+          transform: "type Tail<T> = T extends [any, ...infer R] ? R : never",
+          output: "Tail<[1,2,3]> = [2,3]",
+        },
+        code: `type Tail<T extends readonly unknown[]> =
+  T extends readonly [unknown, ...infer Rest] ? Rest : never
+
+type A = Tail<[1, 2, 3]>
+//    ^? [2, 3]
+
+type B = Tail<['a']>
+//    ^? []`,
+      },
+      {
+        id: "type-assertion-as",
+        title: "Type assertions (`as`)",
+        summary: "Tell TypeScript “trust me” — useful, but easy to abuse.",
+        details:
+          "Prefer runtime checks when safety matters. Use `as` when you've already proven something TS can't see.",
+        tags: ["pattern"],
+        io: {
+          input: "const el = document.querySelector('#email')",
+          transform: "narrow with instanceof (preferred) or assert with `as`",
+          output: "HTMLInputElement access becomes safe",
+        },
+        code: `const el = document.querySelector('#email')
+
+// Unsafe if el can be null:
+const input1 = el as HTMLInputElement
+input1.value
+
+// Safer: narrow first
+if (el instanceof HTMLInputElement) {
+  el.value
+}`,
       },
     ],
   },
@@ -774,6 +984,45 @@ function createUserOnApi(values: { email: Email; password: Password }) {
 
 createUserOnApi(validateValues({ email: 'a@b.com', password: '12345678' }))`,
       },
+      {
+        id: "module-augmentation",
+        title: "Module augmentation (extend a library’s types)",
+        summary:
+          "Add/override types for an existing module without forking it.",
+        details:
+          "This is commonly used to extend third-party libraries (e.g. adding fields to a session/user type).",
+        tags: ["pattern"],
+        io: {
+          input: "A library exports an interface",
+          transform: "declare module 'lib' { interface X { ... } }",
+          output: "Your project sees the extended interface",
+        },
+        code: `// imagine this comes from 'my-lib'
+export type Session = { userId: string }
+
+// in your app (e.g. src/types/my-lib.d.ts)
+declare module 'my-lib' {
+  export type Session = { userId: string; role: 'admin' | 'user' }
+}
+
+// Now Session includes role in your project`,
+      },
+      {
+        id: "declare-global",
+        title: "declare global (augment the global scope)",
+        summary:
+          "Safely add types to `globalThis` / `Window` / global namespaces.",
+        tags: ["pattern"],
+        code: `export {}
+
+declare global {
+  interface Window {
+    __APP_VERSION__: string
+  }
+}
+
+window.__APP_VERSION__`,
+      },
     ],
   },
   {
@@ -835,6 +1084,32 @@ export const Modal = ({ variant, ...rest }: ModalProps) => {
 }
 
 // Alternative: keep props param and destructure inside the 'title' branch`,
+      },
+      {
+        id: "currying-hooks",
+        title: "Currying (and “curried hook” factories)",
+        summary:
+          "Split parameters across calls to improve inference and reuse.",
+        details:
+          "In React, currying is often used to create a specialized hook (e.g. pre-binding a key) while keeping strong return types.",
+        tags: ["react", "generic", "pattern"],
+        io: {
+          input: "createUseStoreKey('theme')",
+          transform: "returns a hook specialized for that key",
+          output: "useTheme(): 'dark' | 'light'",
+        },
+        code: `// “Curried hook” factory pattern (types-only example)
+type Store = { theme: 'dark' | 'light'; locale: 'en' | 'ms' }
+
+function createUseStoreKey<K extends keyof Store>(key: K) {
+  return function useStoreKey(): Store[K] {
+    // imagine reading from context/store here
+    throw new Error('not implemented')
+  }
+}
+
+const useTheme = createUseStoreKey('theme')
+// useTheme(): 'dark' | 'light'`,
       },
     ],
   },

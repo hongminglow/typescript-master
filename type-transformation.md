@@ -1,8 +1,8 @@
 # Type Transformations (Fast Reference)
 
-This file is a **clean summary** of the TypeScript type-transformation notes you copied from Total TypeScript.
+This file is a **fast reference** for TypeScript type transformations and the key patterns that support them.
 
-Goal: let you **recall each feature at a glance**.
+Goal: let you **recall each feature at a glance**, with minimal examples you can reuse.
 
 ## Quick index
 
@@ -14,6 +14,7 @@ Goal: let you **recall each feature at a glance**.
 - Type helpers: generics, constraints, defaults
 - Conditional types: logic, `infer`, distributivity
 - Mapped types: key remapping, conditional picks, deep transforms
+- Practical patterns: overloads, type guards, assertion functions, `satisfies`, discriminated tuples
 
 ---
 
@@ -170,6 +171,75 @@ type EventType = Event["type"];
 
 If a value could be several things, TypeScript forces your code to be safe for **all** of them until you narrow it.
 
+### Type guards (type predicates)
+
+Great for narrowing `unknown` and cleaning arrays.
+
+```ts
+function isDefined<T>(value: T): value is NonNullable<T> {
+  return value !== null && value !== undefined;
+}
+
+const raw = ["a", null, "b", undefined];
+const filtered = raw.filter(isDefined);
+// string[]
+```
+
+### Assertion functions
+
+Like a type guard, but narrows by throwing when invalid.
+
+```ts
+function assertDefined<T>(value: T): asserts value is NonNullable<T> {
+  if (value === null || value === undefined) throw new Error("Missing");
+}
+
+function getLength(value?: string) {
+  assertDefined(value);
+  return value.length;
+}
+```
+
+### Discriminated tuples
+
+Compact alternative to discriminated objects.
+
+```ts
+type Action = ["add", number] | ["remove", string];
+
+function reducer(action: Action) {
+  const [type, payload] = action;
+  if (type === "add") {
+    payload; // number
+  } else {
+    payload; // string
+  }
+}
+```
+
+### Exhaustive checks with `never`
+
+Make missing union branches a compile-time error.
+
+```ts
+type Shape = { kind: "circle"; r: number } | { kind: "square"; size: number };
+
+function assertNever(x: never): never {
+  throw new Error("Unexpected object");
+}
+
+function area(s: Shape) {
+  switch (s.kind) {
+    case "circle":
+      return Math.PI * s.r ** 2;
+    case "square":
+      return s.size ** 2;
+    default:
+      return assertNever(s);
+  }
+}
+```
+
 ---
 
 ## 4) `as const` (literal inference)
@@ -184,6 +254,26 @@ export const programModeEnumMap = {
   GROUP: "group",
   ONE_ON_ONE: "1on1",
 } as const;
+```
+
+### `satisfies` vs `as const`
+
+- `satisfies`: validates shape without changing inference.
+- `as const`: freezes inference to literals and readonly.
+
+```ts
+type RouteConfig = { path: string; auth: boolean };
+
+const routes = {
+  home: { path: "/", auth: false },
+  admin: { path: "/admin", auth: true },
+} satisfies Record<string, RouteConfig>;
+
+type RouteKey = keyof typeof routes;
+// 'home' | 'admin'
+
+routes.home.path;
+// '/'
 ```
 
 ---
@@ -263,6 +353,63 @@ Constraints and defaults:
 type ApiResponse<TData, TError = { message: string }> =
   | { ok: true; data: TData }
   | { ok: false; error: TError };
+```
+
+### Function overloads
+
+Use overloads when you want a public API with multiple call signatures.
+
+```ts
+type Parsed =
+  | { kind: "string"; value: string }
+  | { kind: "number"; value: number };
+
+function parse(input: string): Extract<Parsed, { kind: "string" }>;
+function parse(input: number): Extract<Parsed, { kind: "number" }>;
+function parse(input: string | number): Parsed {
+  if (typeof input === "string") return { kind: "string", value: input };
+  return { kind: "number", value: input };
+}
+
+const a = parse("hello");
+const b = parse(123);
+```
+
+### Variadic tuple types
+
+Useful for typed `pipe`/`compose`, argument manipulation, and strongly-typed helpers.
+
+```ts
+type Tail<T extends readonly unknown[]> = T extends readonly [
+  unknown,
+  ...infer Rest,
+]
+  ? Rest
+  : never;
+
+type A = Tail<[1, 2, 3]>;
+// [2, 3]
+```
+
+### Currying (and “curried hook” factories)
+
+Currying can improve inference by splitting parameters across calls.
+
+```ts
+const curryAdd = (a: number) => (b: number) => a + b;
+const add5 = curryAdd(5);
+add5(2); // 7
+
+type Store = { theme: "dark" | "light"; locale: "en" | "ms" };
+
+function createUseStoreKey<K extends keyof Store>(key: K) {
+  return function useStoreKey(): Store[K] {
+    throw new Error("not implemented");
+  };
+}
+
+const useTheme = createUseStoreKey("theme");
+// useTheme(): 'dark' | 'light'
 ```
 
 ---
