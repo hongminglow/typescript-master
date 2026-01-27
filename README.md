@@ -27,6 +27,7 @@ Then open the URL Vite prints in your terminal.
   - [advanced-patterns.md](advanced-patterns.md)
   - [react-typescript.md](react-typescript.md)
 - The UI content is currently driven by [src/tutorial/typeTransformations.ts](src/tutorial/typeTransformations.ts)
+- Total Typescript References : https://www.totaltypescript.com/books/total-typescript-essentials
 
 ## Covered TypeScript features (high level)
 
