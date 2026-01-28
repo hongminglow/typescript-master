@@ -1,7 +1,7 @@
 import "./App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CodeBlock } from "./components/CodeBlock";
-import { type TutorialSection, type TutorialTopic, typeTransformationSections } from "./tutorial/typeTransformations";
+import { type TutorialSection, type TutorialTopic, tutorialSections } from "./tutorial/tutorialSections";
 import { highlightTextNodes } from "./utils/highlight";
 
 function escapeRegExp(input: string) {
@@ -61,15 +61,14 @@ function TopicIO(props: { topic: TutorialTopic; queryTokens: string[]; exact: bo
 }
 
 function App() {
-	const [activeSectionId, setActiveSectionId] = useState(typeTransformationSections[0]?.id ?? "extracting-types");
+	const [activeSectionId, setActiveSectionId] = useState(tutorialSections[0]?.id ?? "extracting-types");
 	const [query, setQuery] = useState("");
 	const [exactSearch, setExactSearch] = useState(true);
 	const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-	const activeSection =
-		typeTransformationSections.find((s) => s.id === activeSectionId) ?? typeTransformationSections[0];
+	const activeSection = tutorialSections.find((s) => s.id === activeSectionId) ?? tutorialSections[0];
 
-	const allTopicsCount = useMemo(() => typeTransformationSections.reduce((sum, s) => sum + s.topics.length, 0), []);
+	const allTopicsCount = useMemo(() => tutorialSections.reduce((sum, s) => sum + s.topics.length, 0), []);
 
 	const normalizedQuery = query.trim().toLowerCase();
 	const queryTokens = useMemo(() => tokenizeQuery(normalizedQuery), [normalizedQuery]);
@@ -95,7 +94,7 @@ function App() {
 
 		const results: Array<{ section: TutorialSection; id: string }> = [];
 
-		for (const section of typeTransformationSections) {
+		for (const section of tutorialSections) {
 			for (const topic of section.topics) {
 				const haystack = [
 					section.title,
@@ -104,7 +103,7 @@ function App() {
 					topic.summary,
 					topic.details ?? "",
 					topic.tags.join(" "),
-					topic.code,
+					topic.code ?? "",
 				]
 					.join("\n")
 					.toLowerCase();
@@ -175,7 +174,7 @@ function App() {
 				<aside className="sidebar" aria-label="Tutorial sections">
 					<div className="sidebar__title">Sections</div>
 					<nav className="sidebar__nav">
-						{typeTransformationSections.map((s) => {
+						{tutorialSections.map((s) => {
 							const active = s.id === activeSectionId;
 							return (
 								<button
@@ -204,7 +203,12 @@ function App() {
 
 							<div className="topics">
 								{resolvedTopics.map(({ section, topic }) => (
-									<article key={`${section.id}:${topic.id}`} className="topic">
+									// Text-only topics (no IO + no code) are visually denser by nature,
+									// so we give them a different layout treatment.
+									<article
+										key={`${section.id}:${topic.id}`}
+										className={`topic ${!topic.code?.trim() && !topic.io ? "topic--textOnly" : "topic--rich"}`}
+									>
 										<div className="topic__header">
 											<div>
 												<div className="topic__section">
@@ -234,11 +238,13 @@ function App() {
 
 										<TopicIO topic={topic} queryTokens={queryTokens} exact={exactSearch} />
 
-										<CodeBlock
-											code={topic.code}
-											language="ts"
-											highlight={hasQuery ? { tokens: queryTokens, exact: exactSearch } : undefined}
-										/>
+										{topic.code?.trim() ? (
+											<CodeBlock
+												code={topic.code}
+												language="ts"
+												highlight={hasQuery ? { tokens: queryTokens, exact: exactSearch } : undefined}
+											/>
+										) : null}
 									</article>
 								))}
 							</div>
@@ -260,7 +266,11 @@ function App() {
 
 							<div className="topics">
 								{activeSection.topics.map((topic) => (
-									<article key={topic.id} className="topic" id={topic.id}>
+									<article
+										key={topic.id}
+										className={`topic ${!topic.code?.trim() && !topic.io ? "topic--textOnly" : "topic--rich"}`}
+										id={topic.id}
+									>
 										<div className="topic__header">
 											<div>
 												<h3 className="topic__title">{topic.title}</h3>
@@ -279,7 +289,7 @@ function App() {
 
 										<TopicIO topic={topic} queryTokens={[]} exact={exactSearch} />
 
-										<CodeBlock code={topic.code} language="ts" />
+										{topic.code?.trim() ? <CodeBlock code={topic.code} language="ts" /> : null}
 									</article>
 								))}
 							</div>

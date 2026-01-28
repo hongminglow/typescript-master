@@ -14,10 +14,24 @@ export type TutorialTopic = {
 		| "infer"
 		| "mapped-type"
 		| "generic"
+		| "function"
+		| "overload"
+		| "inference"
 		| "react"
 		| "pattern"
+		| "context"
+		| "hooks"
+		| "forms"
+		| "hoc"
+		| "pipeline"
+		| "mutability"
+		| "ts-only"
+		| "annotation"
+		| "assertion"
+		| "safety"
+		| "fun-fact"
 	>;
-	code: string;
+	code?: string;
 	io?: {
 		input: string;
 		transform: string;
@@ -32,7 +46,7 @@ export type TutorialSection = {
 	topics: TutorialTopic[];
 };
 
-export const typeTransformationSections: TutorialSection[] = [
+export const tutorialSections: TutorialSection[] = [
 	{
 		id: "extracting-types",
 		title: "Extracting Types",
@@ -688,11 +702,48 @@ const b = parse(123)
 //    ^? { kind: 'number'; value: number }`,
 			},
 			{
+				id: "overload-vs-union",
+				title: "Overloads vs unions",
+				summary: "Unions describe one signature; overloads can produce different return types per input.",
+				details:
+					"If your function always returns the same shape regardless of input, a union parameter is often enough. Reach for overloads when you want the call-site to get a more specific return type based on the input.",
+				tags: ["function", "overload", "union", "inference"],
+				code: `// Union version: one signature
+function parse2(input: string | number) {
+  return typeof input === 'string'
+    ? ({ kind: 'string', value: input } as const)
+    : ({ kind: 'number', value: input } as const)
+}
+
+const x = parse2('hello')
+// x.kind is 'string' | 'number' (often less specific)
+
+// Overload version (previous topic) narrows at the call-site`,
+			},
+			{
+				id: "overload-vs-conditional-types",
+				title: "Overloads vs conditional types",
+				summary:
+					"Conditional types model input→output mapping at the type level; overloads model it at the value level.",
+				details:
+					"If you’re building a pure type helper, conditional types are the right tool. If you’re building a real runtime function and want ergonomic inference at the call-site, overloads are often simpler and easier to read.",
+				tags: ["overload", "conditional-type", "function", "inference"],
+				code: `type ParseType<I> = I extends string
+  ? Extract<Parsed, { kind: 'string' }>
+  : I extends number
+    ? Extract<Parsed, { kind: 'number' }>
+    : never
+
+// Great for types-only helpers.
+// For real runtime functions, overloads usually read better.`,
+			},
+			{
 				id: "variadic-tuples",
 				title: "Variadic tuple types",
 				summary: "Use tuple spreads and `infer` to model flexible arguments.",
-				details: "This is the backbone of strongly typed `pipe`, `compose`, and many hook helpers.",
-				tags: ["generic", "pattern"],
+				details:
+					"This is the backbone of strongly typed `pipe`, `compose`, and many helper APIs that forward arguments.",
+				tags: ["generic", "pattern", "infer"],
 				io: {
 					input: "type T = [1, 2, 3]",
 					transform: "type Tail<T> = T extends [any, ...infer R] ? R : never",
@@ -706,6 +757,20 @@ type A = Tail<[1, 2, 3]>
 
 type B = Tail<['a']>
 //    ^? []`,
+			},
+			{
+				id: "generics-in-overloads",
+				title: "Generics in overloads",
+				summary: "Use generics inside overload signatures to preserve literals or carry type arguments through.",
+				details:
+					"This is common for helpers like `pick`, `get`, and many React hooks: overloads give nice call-site inference, and generics keep output tied to input.",
+				tags: ["overload", "generic", "function", "inference"],
+				code: `function first<T>(arr: readonly [T, ...T[]]): T {
+  return arr[0]
+}
+
+const v = first(['a', 'b', 'c'] as const)
+//    ^? 'a'`,
 			},
 			{
 				id: "type-assertion-as",
@@ -847,8 +912,7 @@ type API = PrefixKeys<{ users: '/users' }, 'GET '>
 			{
 				id: "attribute-getters",
 				title: "Remapping object keys into getters",
-				summary:
-					"Use key remapping + `Capitalize` to generate getter names like getName/getAge.",
+				summary: "Use key remapping + `Capitalize` to generate getter names like getName/getAge.",
 				tags: ["mapped-type", "template-literal", "keyof"],
 				code: `type Attributes = {
   name: string
@@ -930,8 +994,7 @@ type TransformedFruit = {
 			{
 				id: "routes-object",
 				title: "Create an object from a route union",
-				summary:
-					"Map a union into an object using key remapping, then conditionally pick fields.",
+				summary: "Map a union into an object using key remapping, then conditionally pick fields.",
 				tags: ["mapped-type", "union", "conditional-type", "indexed-access", "infer"],
 				code: `type Route =
   | {
@@ -1045,6 +1108,30 @@ const a = returnWhatIPassIn('hello')
 
 // returnWhatIPassIn(123) // error`,
 			},
+			{
+				id: "identity-fn-vs-as-const",
+				title: "Identity helper vs as const",
+				summary: "An identity helper can preserve inference with less asserting, great for config builders.",
+				details:
+					"as const is excellent, but it is still an assertion. A typed identity helper (often paired with satisfies) can keep literal inference while still checking the object shape you intended.",
+				tags: ["generic", "inference", "pattern"],
+			},
+			{
+				id: "partial-autocomplete-quirk",
+				title: "Partial autocomplete quirk",
+				summary: "Partial<T> can reduce IntelliSense quality because everything becomes optional.",
+				details:
+					"If autocomplete feels worse, consider narrowing the surface area (Pick<T, K>), using a builder, or validating a config object with satisfies instead of making the whole type optional.",
+				tags: ["generic", "pattern", "fun-fact"],
+			},
+			{
+				id: "localstorage-type-args",
+				title: "Typing localStorage with generics",
+				summary: "You can add a type argument, but localStorage is still a runtime string boundary.",
+				details:
+					"A generic getFromStorage<T>() is a nice ergonomic API, but it cannot guarantee the stored value matches T. Treat boundaries as unknown until you validate/parse, then return a typed result.",
+				tags: ["generic", "safety", "pattern"],
+			},
 		],
 	},
 	{
@@ -1146,7 +1233,8 @@ window.__APP_VERSION__`,
 	{
 		id: "react-advanced",
 		title: "React + TypeScript",
-		description: "Advanced props typing patterns: discriminated unions and safe destructuring.",
+		description:
+			"Advanced React typing patterns: discriminated unions, generics in props/hooks/context, and avoiding common React namespace pitfalls.",
 		topics: [
 			{
 				id: "du-props",
@@ -1223,6 +1311,312 @@ function createUseStoreKey<K extends keyof Store>(key: K) {
 
 const useTheme = createUseStoreKey('theme')
 // useTheme(): 'dark' | 'light'`,
+			},
+			{
+				id: "du-optional-props-undefined-branch",
+				title: "Optional props via an explicit union branch",
+				summary:
+					"Instead of making a prop optional everywhere, make it required in one branch and forbidden in another.",
+				details:
+					"This keeps the API honest. A helpful trick is to use `title?: undefined` (or `title?: never`) in the branch where the prop must not exist.",
+				tags: ["react", "union", "pattern", "safety"],
+				code: `type ModalProps =
+  | { variant: 'no-title'; title?: undefined }
+  | { variant: 'title'; title: string }
+
+function Modal(props: ModalProps) {
+  if (props.variant === 'no-title') return null
+  props.title
+}`,
+			},
+			{
+				id: "reactnode-reactelement-reactfc",
+				title: "ReactNode vs ReactElement vs React.FC",
+				summary:
+					"ReactNode is anything renderable; ReactElement is a specific element; React.FC adds implicit children and has tradeoffs.",
+				details:
+					"For most components, prefer typing props and returning `JSX.Element` (or `React.ReactElement`) rather than using `React.FC`. Use `React.ReactNode` for children because it matches what React can render (strings, numbers, fragments, arrays, null, etc.).",
+				tags: ["react", "ts-only", "fun-fact"],
+			},
+			{
+				id: "generic-props-and-type-args",
+				title: "Generic props + inference in components",
+				summary: "Make components reusable by parameterizing props, and rely on inference when possible.",
+				details:
+					"You can define `Props<T>` and use it in a generic component. Usually, TypeScript infers `T` from props, so you rarely need to manually pass type arguments.",
+				tags: ["react", "generic", "inference"],
+				code: `type ListProps<T> = { items: T[]; render: (item: T) => React.ReactNode }
+
+function List<T>(props: ListProps<T>) {
+  return <div>{props.items.map(props.render)}</div>
+}
+
+// <List items={[1,2,3]} render={(n) => n} /> // T inferred as number`,
+			},
+			{
+				id: "typed-context-with-generics",
+				title: "Strongly typed context (with a factory)",
+				summary: "Create a context factory so each context instance carries its own type.",
+				details:
+					"This avoids `any` contexts. The factory closes over `T`, and a runtime null check makes the hook safe to use.",
+				tags: ["react", "context", "generic", "safety"],
+				code: `function createStrictContext<T>() {
+  const Ctx = React.createContext<T | null>(null)
+
+  function useCtx() {
+    const value = React.useContext(Ctx)
+    if (!value) throw new Error('Missing provider')
+    return value
+  }
+
+  return [Ctx.Provider, useCtx] as const
+}`,
+			},
+			{
+				id: "hooks-type-args-query-mutation",
+				title: "Type args in custom query/mutation hooks",
+				summary: "Expose generics so call-sites can specify result/error/input types when inference isn’t enough.",
+				details:
+					"A good hook API usually lets you omit generics most of the time (inference), but still allows explicit type args for tricky wrapper hooks.",
+				tags: ["react", "hooks", "generic", "inference"],
+			},
+			{
+				id: "render-props-children-typing",
+				title: "Typing children for render props",
+				summary: "If `children` is a function, type it as a function returning ReactNode.",
+				details: "This keeps render props flexible: callers can return strings, fragments, arrays, or elements.",
+				tags: ["react", "pattern"],
+				code: `type RenderProps<T> = {
+  value: T
+  children: (value: T) => React.ReactNode
+}
+
+function WithValue<T>({ value, children }: RenderProps<T>) {
+  return <>{children(value)}</>
+}`,
+			},
+			{
+				id: "generic-hoc",
+				title: "Generic higher-order components (HOCs)",
+				summary:
+					"Preserve wrapped component props by expressing the wrapper as `<P>(Component: ComponentType<P>) => ComponentType<P>`.",
+				details:
+					"The main goal is: don’t lose props inference. Many HOC bugs come from using `any` or failing to forward generics correctly.",
+				tags: ["react", "hoc", "generic", "pattern"],
+				code: `function withLogger<P>(Component: React.ComponentType<P>) {
+  return function Logged(props: P) {
+    console.log('render')
+    return <Component {...props} />
+  }
+}`,
+			},
+			{
+				id: "react-namespace",
+				title: "Understanding the React namespace",
+				summary:
+					"The React namespace contains runtime APIs and types: React.ComponentType, ReactNode, ReactElement, etc.",
+				details:
+					"In modern TS + JSX runtime, you may not need `import React from 'react'` for JSX, but you can still import types from React. Prefer `import type` for types to keep output clean.",
+				tags: ["react", "ts-only", "pipeline"],
+			},
+			{
+				id: "react-hook-form-types",
+				title: "Understanding useForm type declarations (React Hook Form)",
+				summary: "useForm is generic over your form values, so the shape of fields and errors stays consistent.",
+				details:
+					"Even if you don’t use React Hook Form, the pattern is useful: `useSomething<TValues>()` lets libraries connect string field names to a concrete object type via `keyof` and conditional types.",
+				tags: ["react", "forms", "generic"],
+			},
+		],
+	},
+	{
+		id: "extras-fun-facts",
+		title: "Extras & Fun Facts",
+		description:
+			"Extra TypeScript ideas (and common footguns) that help you reason about safety, runtime behavior, and the build pipeline.",
+		topics: [
+			{
+				id: "ts-pipeline-typecheck-vs-transpile",
+				title: "Type-checking vs transpiling",
+				summary:
+					"TypeScript has two big jobs: verify types (type-check) and output JS (transpile/emit) — tools may split these roles.",
+				details:
+					"In many modern setups, a fast transpiler (like esbuild via Vite) turns TS/TSX into JavaScript, while `tsc` is run separately to type-check. This is why a project can “build” JavaScript even if type errors exist — unless you wire `tsc` into CI/build to fail on errors.",
+				tags: ["pipeline", "safety", "fun-fact"],
+			},
+			{
+				id: "ts-types-are-erased",
+				title: "Types are erased at runtime",
+				summary: "Most TypeScript types disappear after compilation, so you can’t rely on them for runtime checks.",
+				details:
+					"Interfaces, type aliases, generics, and access modifiers are compile-time only. If you need runtime validation, you must validate values at runtime (e.g., schema validation) — TypeScript can’t stop untrusted JSON from being the wrong shape.",
+				tags: ["ts-only", "safety", "fun-fact"],
+			},
+			{
+				id: "annotation-vs-assertion-vs-satisfies",
+				title: "Annotation vs assertion vs `satisfies`",
+				summary: "Three ways to “connect” a value to a type, with very different safety tradeoffs.",
+				details:
+					"A type annotation (`const x: T = ...`) makes TypeScript check the value matches `T`. A type assertion (`... as T`) tells TypeScript to trust you (it can bypass errors). `satisfies T` checks the value conforms to `T` but keeps a more specific inferred type, which is great for config objects and `as const` maps.",
+				tags: ["annotation", "assertion", "safety"],
+			},
+			{
+				id: "unknown-double-assertion",
+				title: "The “escape hatch”: `as unknown as X`",
+				summary:
+					"A double assertion can force almost any value to almost any type — useful in rare interop cases, risky in app code.",
+				details:
+					"`unknown` is a top type that blocks property access until you narrow. Casting to `unknown` and then to `X` sidesteps compatibility checks and can hide real bugs. Prefer proper narrowing (type guards), parsing/validation, or reshaping the data instead.",
+				tags: ["assertion", "safety", "fun-fact"],
+			},
+			{
+				id: "readonly-is-compile-time",
+				title: "`readonly` is compile-time only",
+				summary: "Readonly types prevent mutation in your code, but they don’t freeze objects at runtime.",
+				details:
+					"`readonly` (and `Readonly<T>`) protects you from accidental writes, but it doesn’t make the JavaScript value immutable. If other code holds the same object reference, it can still mutate it. If you need runtime immutability, you must use runtime mechanisms like `Object.freeze` (with tradeoffs).",
+				tags: ["mutability", "safety"],
+			},
+			{
+				id: "as-const-and-literal-inference",
+				title: "`as const`: literal inference + deep readonly",
+				summary:
+					"`as const` keeps values narrow (literals) and makes object/array properties readonly — extremely useful for creating unions.",
+				details:
+					"Without `as const`, TypeScript often widens values (`'dark'` becomes `string`, `true` becomes `boolean`). With `as const`, you can build a runtime map and derive precise types like `keyof typeof map` or `(typeof map)[K]` without repeating yourself.",
+				tags: ["mutability", "typeof", "keyof"],
+			},
+			{
+				id: "structural-typing",
+				title: "Structural typing (not nominal)",
+				summary:
+					"In TypeScript, “if it looks like a duck, it’s a duck”: compatibility is based on shape, not declared name.",
+				details:
+					"Two different types with the same properties are usually assignable to each other. If you need nominal-ish behavior (e.g., `UserId` not assignable to `OrderId`), a common pattern is branding (intersection with a unique symbol) so the shapes differ even if both are strings.",
+				tags: ["fun-fact", "pattern", "safety"],
+			},
+			{
+				id: "enum-vs-as-const-map",
+				title: "`enum` vs `as const` object map",
+				summary: "Enums create runtime objects; `as const` maps are plain JS objects with types derived from them.",
+				details:
+					"`enum` can be convenient but it emits JavaScript (and has some surprising runtime behaviors, especially with numeric enums). An `as const` object map is explicit runtime data, tree-shake friendly, and works great with `keyof typeof` to derive unions. For many apps, `as const` maps are a simpler alternative.",
+				tags: ["ts-only", "fun-fact", "safety"],
+			},
+			{
+				id: "const-enum-note",
+				title: "`const enum` is compile-time only (with caveats)",
+				summary:
+					"`const enum` can inline values and avoid runtime emit, but can cause tooling/interoperability issues.",
+				details:
+					"Because `const enum` values are inlined, consumers don’t have a runtime enum object. This can be great for performance but can also make builds trickier across package boundaries. Many projects avoid `const enum` unless they control the full compilation pipeline.",
+				tags: ["ts-only", "pipeline", "fun-fact"],
+			},
+			{
+				id: "type-imports-and-tree-shaking",
+				title: "`import type` helps separate runtime from types",
+				summary: "Type-only imports keep the JS output clean and can prevent accidental side effects.",
+				details:
+					"Using `import type` makes it clear an import is erased at runtime. This helps avoid pulling in runtime code when you only needed types (useful for bundling, tree-shaking, and avoiding unintended module side effects).",
+				tags: ["ts-only", "pipeline", "safety"],
+			},
+			{
+				id: "empty-object-type",
+				title: "The empty object type (`{}`) is not “an empty object”",
+				summary:
+					"`{}` means “any non-nullish value” (almost), not “an object with no keys” — it can accept numbers, strings, functions, etc.",
+				details:
+					"This is one of TypeScript’s weird-but-important corners. If you mean “an object with no known properties”, prefer `Record<string, never>` (strict) or `{ [k: string]: never }`. If you mean “some object” (not primitives), use `object`. If you mean “anything”, use `unknown` (safest) or `any` (least safe).",
+				tags: ["fun-fact", "safety", "ts-only"],
+			},
+			{
+				id: "type-world-vs-value-world",
+				title: "Type world vs value world",
+				summary:
+					"TypeScript runs in two “worlds”: values exist at runtime; types exist only at compile time — confusing bugs happen when you mix them up.",
+				details:
+					"You can’t `console.log` a type, and you can’t use a runtime value where a type is expected without bridging via tools like `typeof` (value → type) or `as const` (keep literals). Many errors become clearer when you ask: “Am I writing JavaScript (values) or TypeScript (types) right now?”.",
+				tags: ["ts-only", "fun-fact"],
+			},
+			{
+				id: "recommended-tsconfig-defaults",
+				title: "Recommended default TypeScript config (pragmatic)",
+				summary:
+					"A strong baseline is: keep strictness on, avoid emitting from `tsc` if a bundler emits, and tighten checks gradually as the codebase matures.",
+				details:
+					"Common “good defaults” include enabling `strict`, `noUncheckedIndexedAccess` (when you’re ready), `exactOptionalPropertyTypes` (when you can adopt it), and keeping `skipLibCheck` on for speed in many apps. In Vite-style pipelines, it’s normal to set `noEmit: true` and run `tsc` purely for type-checking, while Vite/esbuild handles transpilation and bundling.",
+				tags: ["pipeline", "safety", "fun-fact"],
+			},
+			{
+				id: "interface-vs-type",
+				title: "`interface` vs `type` (when to use which)",
+				summary:
+					"Both model object shapes well, but they differ in ergonomics: interfaces merge and extend nicely; type aliases compose anything.",
+				details:
+					"Use `interface` when you want a primarily object-shaped contract, especially for public API surfaces and extension via `extends` / declaration merging. Use `type` when you need unions, intersections, tuples, conditional types, mapped types, or you’re composing lots of pieces. In most teams, consistency matters more than the choice — pick a rule of thumb and stick with it.",
+				tags: ["pattern", "safety", "fun-fact"],
+			},
+			{
+				id: "modules-scripts-and-dts",
+				title: "Modules, scripts, and `.d.ts` files",
+				summary:
+					"Whether a file is a module affects scope, imports, and how TypeScript understands globals — `.d.ts` is how you describe types without runtime code.",
+				details:
+					"A file with `import`/`export` is a module, so its declarations are scoped. “Script” files can leak globals across the project (surprising in large codebases). Declaration files (`.d.ts`) let you declare types for JS libraries, ambient globals, or publish types for consumers — but remember they don’t add runtime behavior.",
+				tags: ["pipeline", "ts-only", "safety"],
+			},
+			{
+				id: "utility-folder-and-architecture",
+				title: "The “utility folder” pattern (TypeScript angle)",
+				summary:
+					"Utilities aren’t just about code reuse — they’re also about centralizing types, narrowing logic, and safe boundaries between “unknown” and “known”.",
+				details:
+					"A great TS-driven approach is to put type guards, parsers, and small adapters in utilities so the rest of your app consumes well-typed data. This reduces repeated assertions and encourages a pipeline where untrusted input becomes `unknown` → validated → typed.",
+				tags: ["pattern", "safety"],
+			},
+			{
+				id: "designing-types-top-down",
+				title: "Designing your types: model the domain",
+				summary:
+					"Strong types are designed, not guessed: start with the domain rules, then encode them using unions, discriminators, and branded primitives.",
+				details:
+					"A recurring theme: use literal unions for finite sets, discriminated unions for state machines, and separate “input types” (looser) from “validated/internal types” (stricter). When you feel tempted to reach for `any`/assertions, it’s often a sign the type design can be improved.",
+				tags: ["union", "pattern", "safety"],
+			},
+			{
+				id: "deriving-types-dont-repeat-yourself",
+				title: "Deriving types (don’t repeat yourself)",
+				summary:
+					"Prefer deriving types from runtime values or existing types instead of re-declaring shapes in multiple places.",
+				details:
+					"Patterns like `typeof`, `keyof`, indexed access types, and utility types let you keep types in sync with implementation. This reduces drift (where code changes but types don’t) and makes refactors safer.",
+				tags: ["typeof", "keyof", "utility-type"],
+			},
+			{
+				id: "objects-and-widening",
+				title: "Objects, widening, and mutability surprises",
+				summary:
+					"Many TS “gotchas” come from widened types and shared references: values widen unless you ask them not to, and objects are mutable references.",
+				details:
+					"If a value widens too much, you may lose exhaustiveness and auto-complete. Tools like `as const`, `satisfies`, and careful annotations help keep types precise. For mutability, remember that copying references (not cloning) is the default in JS — TS can prevent some mutations, but it can’t make shared references safe by itself.",
+				tags: ["mutability", "safety", "fun-fact"],
+			},
+			{
+				id: "unions-literals-and-narrowing",
+				title: "Unions, literals, and narrowing (core superpower)",
+				summary: "TypeScript shines when you model finite possibilities and narrow them safely using control flow.",
+				details:
+					"Literal unions model “one of a few values”. Narrowing happens via `if`, `switch`, `in`, `typeof`, truthiness checks, and user-defined type guards. A great practice is to design types so narrowing is obvious (e.g., discriminated unions), then let TypeScript guide you to handle every case.",
+				tags: ["union", "safety"],
+			},
+			{
+				id: "essential-types-and-annotations",
+				title: "Essential types + annotations (use them strategically)",
+				summary:
+					"You usually want inference first, then add annotations at boundaries: function params, public APIs, and tricky generics.",
+				details:
+					"Annotations are most valuable where inference can’t see enough context (API boundaries) or where you’re encoding intent. Over-annotating can make refactors harder, but under-annotating can leak `any` or widen types. Treat annotations as guardrails, not busywork.",
+				tags: ["annotation", "safety"],
 			},
 		],
 	},
