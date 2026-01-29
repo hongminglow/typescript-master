@@ -1118,19 +1118,42 @@ const a = returnWhatIPassIn('hello')
 			},
 			{
 				id: "partial-autocomplete-quirk",
-				title: "Partial autocomplete quirk",
-				summary: "Partial<T> can reduce IntelliSense quality because everything becomes optional.",
+				title: "Autocomplete quirk: union with string",
+				summary:
+					"If you do `Size | string`, TypeScript often collapses the union to just `string`, killing autocomplete.",
 				details:
-					"If autocomplete feels worse, consider narrowing the surface area (Pick<T, K>), using a builder, or validating a config object with satisfies instead of making the whole type optional.",
+					"A common workaround is to wrap `string` in parentheses and intersect it with an empty object: `Size | (string & {})`. This seems to delay widening just enough for the editor to still suggest `'xs' | 'sm' | ...` while permitting any other string. It’s a bit magical, but it works.",
 				tags: ["generic", "pattern", "fun-fact"],
+				code: `type Size = 'xs' | 'sm'
+
+type Loose1 = Size | string
+//    ^? string (often loses your literal union)
+
+type Loose2 = Size | (string & {})
+//    ^? 'xs' | 'sm' | (string & {})`,
 			},
 			{
 				id: "localstorage-type-args",
 				title: "Typing localStorage with generics",
-				summary: "You can add a type argument, but localStorage is still a runtime string boundary.",
+				summary:
+					"If you want `useLocalStorage<{name: string}>()`, your function must accept a type argument and thread it through get/set.",
 				details:
-					"A generic getFromStorage<T>() is a nice ergonomic API, but it cannot guarantee the stored value matches T. Treat boundaries as unknown until you validate/parse, then return a typed result.",
+					"Important details: (1) add `<T>` to the function so the call-site can pass a type argument, (2) make `set` accept `T` and `get` return `T | null` (because JSON parse can return null), and (3) if callers don’t provide the type arg, `T` will often be inferred as `unknown` — so document that this API expects explicit type arguments.",
 				tags: ["generic", "safety", "pattern"],
+				code: `export const useLocalStorage = <T>(prefix: string) => {
+  return {
+    get: (key: string): T | null => {
+      return JSON.parse(window.localStorage.getItem(prefix + key) || 'null')
+    },
+    set: (key: string, value: T) => {
+      window.localStorage.setItem(prefix + key, JSON.stringify(value))
+    },
+  }
+}
+
+const userStorage = useLocalStorage<{ name: string }>('user')
+const matt = userStorage.get('matt')
+//    ^? { name: string } | null`,
 			},
 		],
 	},
@@ -1262,6 +1285,21 @@ export const Modal = (props: ModalProps) => {
 // <Modal variant="title" /> // error`,
 			},
 			{
+				id: "generics-vs-discriminated-unions",
+				title: "Generics vs discriminated unions",
+				summary:
+					"If you’re modeling a finite set of UI variants, discriminated unions are often cleaner than a generic TVariant.",
+				details:
+					"A tempting approach is `ModalProps<TVariant>` and then trying to conditionally include props based on TVariant. If the variants are finite (e.g. `with-button` vs `without-button`), a discriminated union usually gives clearer types, better autocomplete, and simpler component code.",
+				tags: ["react", "union", "pattern", "generic"],
+				code: `type ModalProps =
+  { isOpen: boolean } &
+    (
+      | { variant: 'with-button'; buttonLabel: string; onButtonClick: () => void }
+      | { variant: 'without-button' }
+    )`,
+			},
+			{
 				id: "du-destructure",
 				title: "Destructuring discriminated unions (pitfall + fix)",
 				summary: "Destructuring props can lose narrowing when a field isn't on every union member.",
@@ -1354,6 +1392,37 @@ function List<T>(props: ListProps<T>) {
 // <List items={[1,2,3]} render={(n) => n} /> // T inferred as number`,
 			},
 			{
+				id: "tsx-angle-bracket-type-args",
+				title: "Passing a type argument to a component (TSX angle brackets)",
+				summary: "Just like functions, generic components can accept manual type arguments: `<Table<User> ... />`.",
+				details:
+					"For test/demo purposes, you can also call the component like a function: `Table<User>({...})`. In real apps you’ll usually rely on inference, but it’s useful to know you can override it. When defining a generic component as a const arrow function in TSX, the `<T,>` syntax helps avoid parsing ambiguity.",
+				tags: ["react", "generic", "inference"],
+				code: `type TableProps<T> = {
+  rows: T[]
+  renderRow: (row: T) => React.ReactNode
+}
+
+// Generic component definition
+const Table = <T,>(props: TableProps<T>) => {
+  return <div>{props.rows.map(props.renderRow)}</div>
+}
+
+type User = { id: number }
+
+// Manual type argument in TSX
+const el = (
+  <Table<User>
+    // @ts-expect-error rows should be User[]
+    rows={[{ id: '123' }]}
+    renderRow={() => null}
+  />
+)
+
+// (demo only) Calling it like a function also works
+Table<User>({ rows: [{ id: 123 }], renderRow: () => null })`,
+			},
+			{
 				id: "typed-context-with-generics",
 				title: "Strongly typed context (with a factory)",
 				summary: "Create a context factory so each context instance carries its own type.",
@@ -1379,6 +1448,36 @@ function List<T>(props: ListProps<T>) {
 				details:
 					"A good hook API usually lets you omit generics most of the time (inference), but still allows explicit type args for tricky wrapper hooks.",
 				tags: ["react", "hooks", "generic", "inference"],
+			},
+			{
+				id: "mutation-hook-best-inference-refactor",
+				title: "Refactoring a mutation hook for best inference",
+				summary:
+					"Don’t capture an entire function type as a generic if you later need to re-create it — capture args + return separately.",
+				details:
+					"Capturing `TMutation extends (...args) => Promise<any>` seems appealing, but you often hit assignability issues when you try to return a newly created function typed as `TMutation`. A robust approach is: infer/carry `TArgs extends any[]` and `TReturn`, then define `mutate: (...args: TArgs) => Promise<TReturn>`.",
+				tags: ["react", "hooks", "generic", "pattern", "inference"],
+				code: `type Mutation<TArgs extends any[], TReturn> = (...args: TArgs) => Promise<TReturn>
+
+interface UseMutationOptions<TArgs extends any[], TReturn> {
+  mutation: Mutation<TArgs, TReturn>
+}
+
+interface UseMutationReturn<TArgs extends any[], TReturn> {
+  mutate: Mutation<TArgs, TReturn>
+  isLoading: boolean
+}
+
+export const useMutation = <TArgs extends any[], TReturn>(
+  opts: UseMutationOptions<TArgs, TReturn>,
+): UseMutationReturn<TArgs, TReturn> => {
+  return {
+    isLoading: false,
+    mutate: async (...args) => {
+      return opts.mutation(...args)
+    },
+  }
+}`,
 			},
 			{
 				id: "render-props-children-typing",
@@ -1408,6 +1507,30 @@ function WithValue<T>({ value, children }: RenderProps<T>) {
     console.log('render')
     return <Component {...props} />
   }
+}`,
+			},
+			{
+				id: "withrouter-generic-hoc",
+				title: "A practical generic HOC: withRouter",
+				summary:
+					"To inject a prop (router) and remove it from the public API, use generics + Omit — plus an assertion to satisfy assignability.",
+				details:
+					"Pattern: capture full props as `TProps`, return a component that takes `Omit<TProps, 'router'>`, inject `router`, and forward. TypeScript may complain that `Omit<TProps, 'router'> & { router: ... }` isn’t assignable to `TProps` because `TProps` could be instantiated arbitrarily; the pragmatic fix is `props as TProps` right at the injection boundary.",
+				tags: ["react", "hoc", "generic", "pattern", "safety"],
+				code: `type Router = { push: (path: string) => void }
+declare function useRouter(): Router
+
+export const withRouter = <TProps extends { router: Router }>(
+  Component: (props: TProps) => React.ReactNode,
+) => {
+  const NewComponent = (props: Omit<TProps, 'router'>) => {
+    const router = useRouter()
+    return <>{Component({ ...(props as TProps), router })}</>
+  }
+
+	NewComponent.displayName =
+		'withRouter(' + (Component.name ?? 'Component') + ')'
+  return NewComponent
 }`,
 			},
 			{
